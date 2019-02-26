@@ -478,7 +478,7 @@ func (conf *ResourceConfig) injectPodSpec(patch *Patch, identity k8s.TLSIdentity
 			Image:                    conf.taggedProxyInitImage(),
 			ImagePullPolicy:          v1.PullPolicy(conf.proxyConfig.GetProxyInitImage().GetPullPolicy()),
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
-			Args:                     initArgs,
+			Args: initArgs,
 			SecurityContext: &v1.SecurityContext{
 				Capabilities: &v1.Capabilities{
 					Add: []v1.Capability{v1.Capability("NET_ADMIN")},

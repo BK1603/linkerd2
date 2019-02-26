@@ -13,7 +13,7 @@ webhooks:
     service:
       name: linkerd-proxy-injector
       namespace: {{ .ControllerNamespace }}
-      path: "/"
+      path: "/webhook"
     caBundle: {{ .CABundle }}
   rules:
   - operations: [ "CREATE" , "UPDATE" ]

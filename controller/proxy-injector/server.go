@@ -13,15 +13,17 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// WebhookServer is the webhook's HTTP server. It has an embedded webhook which
-// mutate all the requests.
-type WebhookServer struct {
+// Server is the HTTP server that serves inject requests coming from both the
+// CLI and admission controller webhook. It has an embedded webhook which mutate
+// all the requests.
+type Server struct {
 	*http.Server
 	*Webhook
+	*Injector
 }
 
-// NewWebhookServer returns a new instance of the WebhookServer.
-func NewWebhookServer(client kubernetes.Interface, addr, controllerNamespace string, noInitContainer, tlsEnabled bool, rootCA *pkgTls.CA) (*WebhookServer, error) {
+// NewServer returns a new instance of the Server.
+func NewServer(client kubernetes.Interface, addr, controllerNamespace string, noInitContainer, tlsEnabled bool, rootCA *pkgTls.CA) (*Server, error) {
 	c, err := tlsConfig(rootCA, controllerNamespace)
 	if err != nil {
 		return nil, err
@@ -31,18 +33,27 @@ func NewWebhookServer(client kubernetes.Interface, addr, controllerNamespace str
 		Addr:      addr,
 		TLSConfig: c,
 	}
+	serveMux := http.NewServeMux()
 
 	webhook, err := NewWebhook(client, controllerNamespace, noInitContainer, tlsEnabled)
 	if err != nil {
 		return nil, err
 	}
 
-	ws := &WebhookServer{server, webhook}
-	ws.Handler = http.HandlerFunc(ws.serve)
+	injector, err := NewInjector()
+	if err != nil {
+		return nil, err
+	}
+
+	ws := &Server{server, webhook, injector}
+
+	serveMux.HandleFunc("/webhook", ws.serveWebhook)
+	serveMux.HandleFunc("/injector", ws.serveInjector)
+	ws.Handler = serveMux
 	return ws, nil
 }
 
-func (w *WebhookServer) serve(res http.ResponseWriter, req *http.Request) {
+func (w *Server) serveWebhook(res http.ResponseWriter, req *http.Request) {
 	var (
 		data []byte
 		err  error
@@ -72,8 +83,45 @@ func (w *WebhookServer) serve(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (w *Server) serveInjector(res http.ResponseWriter, req *http.Request) {
+	var (
+		data []byte
+		err  error
+	)
+	if req.Body != nil {
+		data, err = ioutil.ReadAll(req.Body)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if len(data) == 0 {
+		return
+	}
+
+	log.Infof("received inject request: %s\n", data)
+	result, err := w.Inject(data)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	patch, err := json.Marshal(result)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Infof("returning inject patch: %s\n", patch)
+	if _, err := res.Write(patch); err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 // Shutdown initiates a graceful shutdown of the underlying HTTP server.
-func (w *WebhookServer) Shutdown() error {
+func (w *Server) Shutdown() error {
 	return w.Server.Shutdown(context.Background())
 }
 
