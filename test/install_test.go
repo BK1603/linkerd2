@@ -43,10 +43,10 @@ var (
 	}
 
 	linkerdDeployReplicas = map[string]deploySpec{
-		"linkerd-controller": deploySpec{1, []string{"destination", "public-api", "tap"}},
-		"linkerd-grafana":    deploySpec{1, []string{}},
-		"linkerd-prometheus": deploySpec{1, []string{}},
-		"linkerd-web":        deploySpec{1, []string{"web"}},
+		"linkerd-controller": {1, []string{"destination", "public-api", "tap"}},
+		"linkerd-grafana":    {1, []string{}},
+		"linkerd-prometheus": {1, []string{}},
+		"linkerd-web":        {1, []string{"web"}},
 	}
 
 	// linkerd-proxy logs some errors when TLS is enabled, remove these once
